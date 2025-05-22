@@ -1,4 +1,5 @@
 #from Utils import *
+import logging
 from CodeGenError import *
 
 class Frame():
@@ -40,6 +41,9 @@ class Frame():
     *   simulate an instruction that pushes a value onto operand stack.
     '''
     def push(self):
+        logger = logging.getLogger(f"{'push':<20}")
+        logger.debug("." * 60)
+        logger.debug(f"Pushing. Current: {self.currOpStackSize + 1}, Max: {max(self.maxOpStackSize, self.currOpStackSize + 1)}")
         self.currOpStackSize = self.currOpStackSize + 1
         if self.maxOpStackSize < self.currOpStackSize:
             self.maxOpStackSize = self.currOpStackSize
@@ -48,6 +52,9 @@ class Frame():
     *   simulate an instruction that pops a value out of operand stack.
     '''
     def pop(self):
+        logger = logging.getLogger(f"{'pop':<20}")
+        logger.debug("." * 60)
+        logger.debug(f"Popping. Current: {self.currOpStackSize - 1}, Max: {self.maxOpStackSize}")
         self.currOpStackSize = self.currOpStackSize - 1
         if self.currOpStackSize < 0:
             raise IllegalRuntimeException("Pop empty stack")

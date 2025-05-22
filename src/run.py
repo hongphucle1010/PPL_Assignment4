@@ -1,3 +1,4 @@
+import logging
 import sys,os
 sys.path.append('./test/')
 sys.path.append('./main/minigo/parser/')
@@ -8,6 +9,12 @@ sys.path.append('./main/minigo/codegen/')
 import subprocess
 import unittest
 from antlr4 import *
+
+# logging.basicConfig(
+#         level=logging.DEBUG,
+#         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+#         datefmt="%Y-%m-%d %H:%M:%S",
+#     )
 
 ANTLR_JAR = os.environ.get('ANTLR_JAR')
 TARGET_DIR = '../target'

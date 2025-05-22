@@ -49,6 +49,12 @@ class ClassType:
         self.name = name
 
 
+class Interface:
+    def __init__(self, interface: InterfaceType, struct: StructType = None):
+        self.interface: InterfaceType = interface
+        self.struct: StructType = struct
+
+
 class Symbol:
     def __init__(self, name, mtype, value=None):
         self.name = name
@@ -95,6 +101,16 @@ class Emitter:
             )
         elif typeIn is cgen.ClassType:
             return "L" + inType.name + ";"
+        elif typeIn is StructType:
+            return "L" + inType.name + ";"
+        elif typeIn is InterfaceType:
+            return "L" + inType.name + ";"
+        elif typeIn is Interface:
+            return (
+                self.getJVMType(inType.interface)
+                if not inType.struct
+                else self.getJVMType(inType.struct)
+            )
         else:
             return str(typeIn)
 
@@ -108,6 +124,16 @@ class Emitter:
             return "boolean"
         elif typeIn is cgen.StringType:
             return "java/lang/String"
+        elif typeIn is InterfaceType:
+            return "L" + inType.name + ";"
+        elif typeIn is StructType:
+            return "L" + inType.name + ";"
+        elif typeIn is Interface:
+            return (
+                self.getFullType(inType.interface)
+                if not inType.struct
+                else self.getFullType(inType.struct)
+            )
         elif typeIn is VoidType:
             return "void"
 
@@ -123,6 +149,11 @@ class Emitter:
                 return self.jvm.emitBIPUSH(i)
             elif i >= -32768 and i <= 32767:
                 return self.jvm.emitSIPUSH(i)
+        elif type(in_) is bool:
+            if in_:
+                return self.emitPUSHICONST(1, frame)
+            else:
+                return self.emitPUSHICONST(0, frame)
         elif type(in_) is str:
             if in_ == "true":
                 return self.emitPUSHICONST(1, frame)
@@ -152,7 +183,6 @@ class Emitter:
         # in_: String
         # typ: Type
         # frame: Frame
-
         if type(typ) is IntType or type(typ) is BoolType:
             return self.emitPUSHICONST(in_, frame)
         elif type(typ) is FloatType:
@@ -170,9 +200,9 @@ class Emitter:
         # frame: Frame
         # ..., arrayref, index, value -> ...
 
-        frame.pop() # index
-        frame.pop() # arrayref  
-        frame.push() # value
+        frame.pop()  # index
+        frame.pop()  # arrayref
+        frame.push()  # value
         if type(in_) is IntType:
             return self.jvm.emitIALOAD()
         elif type(in_) is FloatType:
@@ -183,6 +213,9 @@ class Emitter:
             type(in_) is cgen.ArrayType
             or type(in_) is cgen.ClassType
             or type(in_) is StringType
+            or type(in_) is StructType
+            or type(in_) is InterfaceType
+            or type(in_) is Interface
         ):
             return self.jvm.emitAALOAD()
         else:
@@ -193,9 +226,9 @@ class Emitter:
         # frame: Frame
         # ..., arrayref, index, value -> ...
 
-        frame.pop() # value
-        frame.pop() # index
-        frame.pop() # arrayref
+        frame.pop()  # value
+        frame.pop()  # index
+        frame.pop()  # arrayref
         if type(in_) is IntType:
             return self.jvm.emitIASTORE()
         elif type(in_) is FloatType:
@@ -206,6 +239,9 @@ class Emitter:
             type(in_) is cgen.ArrayType
             or type(in_) is cgen.ClassType
             or type(in_) is StringType
+            or type(in_) is StructType
+            or type(in_) is InterfaceType
+            or type(in_) is Interface
         ):
             return self.jvm.emitAASTORE()
         else:
@@ -248,9 +284,13 @@ class Emitter:
             type(inType) is cgen.ArrayType
             or type(inType) is cgen.ClassType
             or type(inType) is StringType
+            or type(inType) is StructType
+            or type(inType) is InterfaceType
+            or type(inType) is Interface
         ):
             return self.jvm.emitALOAD(index)
         else:
+            logging.debug(f"name: {name}, inType: {inType}, index: {index}")
             raise IllegalOperandException(name)
 
     """ generate the second instruction for array cell access
@@ -278,7 +318,7 @@ class Emitter:
         # frame: Frame
         # ..., value -> ...
 
-        frame.pop() # value
+        frame.pop()  # value
 
         if type(inType) is IntType or type(inType) is BoolType:
             return self.jvm.emitISTORE(index)
@@ -288,9 +328,13 @@ class Emitter:
             type(inType) is cgen.ArrayType
             or type(inType) is cgen.ClassType
             or type(inType) is StringType
+            or type(inType) is StructType
+            or type(inType) is InterfaceType
+            or type(inType) is Interface
         ):
             return self.jvm.emitASTORE(index)
         else:
+            logging.debug(f"InType: {inType}")
             raise IllegalOperandException(name)
 
     """ generate the second instruction for array cell access
@@ -324,14 +368,16 @@ class Emitter:
                 lexeme, self.getJVMType(in_), isFinal, value
             )
         else:
-            return self.jvm.emitFIELD(lexeme, self.getJVMType(in_), isFinal, value)
+            return self.jvm.emitINSTANCEFIELD(
+                lexeme, self.getJVMType(in_), isFinal, value
+            )
 
     def emitGETSTATIC(self, lexeme: str, in_, frame) -> str:
         # lexeme: String
         # in_: Type
         # frame: Frame
 
-        frame.push() # value
+        frame.push()  # value
         return self.jvm.emitGETSTATIC(lexeme, self.getJVMType(in_))
 
     def emitPUTSTATIC(self, lexeme: str, in_, frame) -> str:
@@ -339,7 +385,7 @@ class Emitter:
         # in_: Type
         # frame: Frame
 
-        frame.pop() # value
+        frame.pop()  # value
         return self.jvm.emitPUTSTATIC(lexeme, self.getJVMType(in_))
 
     def emitGETFIELD(self, lexeme: str, in_, frame) -> str:
@@ -354,8 +400,8 @@ class Emitter:
         # in_: Type
         # frame: Frame
 
-        frame.pop() # value
-        frame.pop() # objectref
+        frame.pop()  # value
+        frame.pop()  # objectref
         return self.jvm.emitPUTFIELD(lexeme, self.getJVMType(in_))
 
     """ generate code to invoke a static method
@@ -409,7 +455,7 @@ class Emitter:
 
         typ: MType = in_
         list(map(lambda x: frame.pop(), typ.partype))
-        frame.pop() # objectref
+        frame.pop()  # objectref
         if not type(typ) is VoidType:
             frame.push()
         return self.jvm.emitINVOKEVIRTUAL(lexeme, self.getJVMType(in_))
@@ -456,9 +502,9 @@ class Emitter:
         # frame: Frame
         # ..., value1, value2 -> ..., result
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         if lexeme == "+":
             if type(in_) is IntType:
                 return self.jvm.emitIADD()
@@ -482,9 +528,9 @@ class Emitter:
         # frame: Frame
         # ..., value1, value2 -> ..., result
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         if lexeme == "*":
             if type(in_) is IntType:
                 return self.jvm.emitIMUL()
@@ -499,17 +545,17 @@ class Emitter:
     def emitDIV(self, frame) -> str:
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         return self.jvm.emitIDIV()
 
     def emitMOD(self, frame) -> str:
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         # return "\tirem\n"
         return self.jvm.emitIREM()
 
@@ -520,9 +566,9 @@ class Emitter:
     def emitANDOP(self, frame) -> str:
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         return self.jvm.emitIAND()
 
     """
@@ -532,9 +578,9 @@ class Emitter:
     def emitOROP(self, frame) -> str:
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
-        frame.push() # result
+        frame.pop()  # value2
+        frame.pop()  # value1
+        frame.push()  # result
         return self.jvm.emitIOR()
 
     def emitShortCircuitOROP(self, frame, operand2: AST, codeGen) -> str:
@@ -565,11 +611,11 @@ class Emitter:
         frame.pop()  # value1
         if type(in_) is FloatType:
             result.append(self.jvm.emitFCMPL())
-            frame.push() # result
+            frame.push()  # result
             result.append(self.jvm.emitICONST(0))
-            frame.push() # result
-            frame.pop() # value2
-            frame.pop() # value1
+            frame.push()  # result
+            frame.pop()  # value2
+            frame.pop()  # value1
 
         if op == ">":
             result.append(self.jvm.emitIFICMPLE(labelF))
@@ -604,8 +650,8 @@ class Emitter:
 
         result = list()
 
-        frame.pop() # value2
-        frame.pop() # value1
+        frame.pop()  # value2
+        frame.pop()  # value1
         if op == ">":
             result.append(self.jvm.emitIFICMPLE(falseLabel))
             result.append(self.emitGOTO(trueLabel))
@@ -671,7 +717,7 @@ class Emitter:
         # label: Int
         # frame: Frame
 
-        frame.pop() # value
+        frame.pop()  # value
         return self.jvm.emitIFGT(label)
 
     """
@@ -684,23 +730,23 @@ class Emitter:
         # label: Int
         # frame: Frame
 
-        frame.pop() # value
+        frame.pop()  # value
         return self.jvm.emitIFLE(label)
 
     def emitIFICMPGT(self, label: int, frame) -> str:
         # label: Int
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
+        frame.pop()  # value2
+        frame.pop()  # value1
         return self.jvm.emitIFICMPGT(label)
 
     def emitIFICMPLT(self, label: int, frame) -> str:
         # label: Int
         # frame: Frame
 
-        frame.pop() # value2
-        frame.pop() # value1
+        frame.pop()  # value2
+        frame.pop()  # value1
         return self.jvm.emitIFICMPLT(label)
 
     """   generate code to duplicate the value on the top of the operand stack.<p>
@@ -727,8 +773,8 @@ class Emitter:
     def emitI2F(self, frame) -> str:
         # frame: Frame
 
-        frame.pop() # value
-        frame.push() # result
+        frame.pop()  # value
+        frame.push()  # result
         return self.jvm.emitI2F()
 
     """ generate code to return.
@@ -818,13 +864,15 @@ class Emitter:
     def emitNEWARRAY(self, dimens: list, eleType: Type, value: NestedList, frame):
         logger = logging.getLogger(f"{'emitNEWARRAY':<20}")
         logger.debug("-" * 60)
-        logger.debug(f"Emitting NEWARRAY with {dimens} dimensions, {eleType} type, values {value}")
+        logger.debug(
+            f"Emitting NEWARRAY with {dimens} dimensions, {eleType} type, values {value}"
+        )
 
         result = list()
         result.append(self.emitPUSHCONST(str(dimens[0]), IntType(), frame))
         if len(dimens) == 1:
-            frame.pop() # dim
-            frame.push() # arrayref
+            frame.pop()  # dim
+            frame.push()  # arrayref
             result.append(self.jvm.emitNEWARRAY(self.getFullType(eleType)))
             logger.debug(f"Pushing newarray {self.getJVMType(eleType)}")
         else:
@@ -842,8 +890,8 @@ class Emitter:
         return "".join(result)
 
     def emitANEWARRAY(self, in_: ArrayType, frame):
-        frame.pop() # dim
-        frame.push() # objectref
+        frame.pop()  # dim
+        frame.push()  # objectref
         return self.jvm.emitANEWARRAY(self.getJVMType(in_))
 
     def emitMULTIANEWARRAY(self, in_, dimens, frame):
@@ -854,6 +902,41 @@ class Emitter:
         frame.push()
         result.append(self.jvm.emitMULTIANEWARRAY(self.getJVMType(in_), len(dimens)))
         return "".join(result)
+
+    def emitNEW(self, name: str, frame):
+        frame.push()  # objectref
+        return self.jvm.emitNEW(name)
+
+    def emitPUSHNULL(self, frame):
+        frame.push()  # objectref
+        return self.jvm.emitPUSHNULL()
+
+    def emitINTERFACE(self, name, methods: List[Prototype], parent: str = ""):
+        # name: String
+        result = list()
+        result.append(self.jvm.emitSOURCE(name + ".java"))
+        result.append(self.jvm.emitINTERFACE(name))
+        result.append(
+            self.jvm.emitSUPER("java/lang/Object" if parent == "" else parent)
+        )
+        result.append("\n")
+        for method in methods:
+            result.append(
+                ".method public abstract "
+                + method.name
+                + "("
+                + "".join(list(map(lambda x: self.getJVMType(x), method.params)))
+                + ")"
+                + self.getJVMType(method.retType)
+                + "\n"
+            )
+            result.append(".end method\n")
+            result.append("\n")
+
+        return "".join(result)
+
+    def emitIMPLEMENTS(self, lexeme: str):
+        return self.jvm.emitIMPLEMENTS(lexeme)
 
     def printout(self, in_: str) -> None:
         # in_: String
